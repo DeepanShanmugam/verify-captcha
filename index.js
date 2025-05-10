@@ -2,13 +2,14 @@
 const axios = require('axios');
 
 /**
- * Verify Google reCAPTCHA token.
+ * Verify Google reCAPTCHA token (supports v2 and v3).
  *
  * @param {string} secret - Your reCAPTCHA secret key.
  * @param {string} token - The token from the frontend.
- * @returns {Promise<boolean>} - true if valid, false otherwise.
+ * @param {object} [options] - Optional settings (like expectedAction, minimumScore).
+ * @returns {Promise<object>} - { success, score, action, challenge_ts, hostname, ... }
  */
-async function verifyRecaptcha(secret, token) {
+async function verifyRecaptcha(secret, token, options = {}) {
   if (!secret || !token) throw new Error('Secret and token are required');
 
   try {
@@ -19,10 +20,30 @@ async function verifyRecaptcha(secret, token) {
       }
     });
 
-    return res.data.success === true;
+    const data = res.data;
+
+    // Optional v3 validation: check score and action
+    if (options.minimumScore !== undefined && data.score !== undefined) {
+      if (data.score < options.minimumScore) {
+        data.success = false;
+        data.reason = 'Low score';
+      }
+    }
+
+    if (options.expectedAction && data.action) {
+      if (data.action !== options.expectedAction) {
+        data.success = false;
+        data.reason = 'Unexpected action';
+      }
+    }
+
+    return data;
   } catch (err) {
     console.error('reCAPTCHA verification failed:', err.message);
-    return false;
+    return {
+      success: false,
+      error: err.message
+    };
   }
 }
 
